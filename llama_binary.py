@@ -45,11 +45,24 @@ WINDOWS_CUDA_13 = PlatformSpec(
 )
 
 
+LINUX_CUDA = PlatformSpec(
+    key="linux-x64-cuda",
+    cli_executable="llama-cli",
+    asset_patterns=(),
+    required_files=(
+        "llama-cli",
+        "libggml-cuda.so",
+    ),
+)
+
+
 def _platform_spec() -> PlatformSpec:
     system = platform.system().lower()
     machine = platform.machine().lower()
     if system == "windows" and machine in {"amd64", "x86_64"}:
         return WINDOWS_CUDA_13
+    if system == "linux" and machine in {"x86_64", "amd64"}:
+        return LINUX_CUDA
     raise RuntimeError(
         "Automatic llama.cpp binary download currently supports Windows x64 CUDA 13 only. "
         "Other platforms are intentionally isolated behind the platform mapping for future support."
