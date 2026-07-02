@@ -12,7 +12,6 @@ import comfy.model_management
 
 from .llama_binary import ensure_llama_cli_paths
 
-
 PROMPT_ECHO_END = "... (truncated)"
 PROMPT_PADDING = " " * 501
 PERF_RE = re.compile(r"\[\s*Prompt:\s*[^|\]]+\|\s*Generation:\s*[^\]]+\]")
@@ -116,6 +115,11 @@ def build_command(
         "-c", str(ctx_size),
         "--seed", str(normalize_llama_seed(seed)),
         "--single-turn",
+        "--no-conversation",
+        "--no-display-prompt",
+        "--no-show-timings",
+        "--simple-io",
+        "--verbosity", "0", 
         "--reasoning", reasoning,
     ]
 
@@ -178,7 +182,7 @@ def run_llama_cli(
         raise RuntimeError(
             f"llama.cpp inference failed with exit code {result.returncode}:\n{stderr}"
         )
-    return _parse_response(result.stdout + "\n" + result.stderr)
+    return _parse_response(result.stdout)
 
 
 def _stop_process(process: subprocess.Popen) -> None:
@@ -212,13 +216,20 @@ def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int)
 
 def _parse_response(text: str) -> tuple[str, str, str]:
     text = str(text or "")
+    # Strip the echoed prompt if present
     if PROMPT_ECHO_END in text:
         text = text.split(PROMPT_ECHO_END, 1)[1]
 
+    # Remove performance line if present (even with --no-show-timings it might be there)
     perf_match = PERF_RE.search(text)
     perf = perf_match.group(0).strip() if perf_match else ""
-    content = text[:perf_match.start()] if perf_match else text
-    content = content.strip()
+    if perf_match:
+        text = text[:perf_match.start()] + text[perf_match.end():]
+
+    content = text.strip()
+    if not content:
+        return "", "", perf
+
     if not content.startswith(START_THINKING):
         return content, "", perf
 
