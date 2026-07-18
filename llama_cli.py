@@ -24,6 +24,7 @@ END_THINKING = "[End thinking]"
 LLAMA_RANDOM_SEED = -1
 LLAMA_SEED_MODULUS = 2**32
 MAX_LLAMA_SEED = LLAMA_SEED_MODULUS - 1
+EXITING_RE = re.compile(r"^Exiting\.\.\.\s*$", re.MULTILINE)
 
 
 def _tensor_to_temp_png(tensor) -> Path:
@@ -54,7 +55,9 @@ def _write_temp_text_file(prefix: str, text: str) -> Path:
 
 
 def _write_prompt_file(prompt: str) -> Path:
-    return _write_temp_text_file("llm-text-processor-prompt-", prompt.strip() + PROMPT_PADDING)
+    return _write_temp_text_file(
+        "llm-text-processor-prompt-", prompt.strip() + PROMPT_PADDING
+    )
 
 
 def split_extra_args(extra_args: str) -> list[str]:
@@ -106,21 +109,31 @@ def build_command(
 
     command = [
         str(cli_paths.cli),
-        "-m", str(model_path),
-        "-n", str(max_tokens),
-        "--temp", str(temperature),
-        "--top-p", str(top_p),
-        "--top-k", str(top_k),
-        "--repeat-penalty", str(repeat_penalty),
-        "-c", str(ctx_size),
-        "--seed", str(normalize_llama_seed(seed)),
+        "-m",
+        str(model_path),
+        "-n",
+        str(max_tokens),
+        "--temp",
+        str(temperature),
+        "--top-p",
+        str(top_p),
+        "--top-k",
+        str(top_k),
+        "--repeat-penalty",
+        str(repeat_penalty),
+        "-c",
+        str(ctx_size),
+        "--seed",
+        str(normalize_llama_seed(seed)),
         "--single-turn",
         "--no-conversation",
         "--no-display-prompt",
         "--no-show-timings",
         "--simple-io",
-        "--verbosity", "0", 
-        "--reasoning", reasoning,
+        "--verbosity",
+        "0",
+        "--reasoning",
+        reasoning,
     ]
 
     # In auto mode llama.cpp receives neither flag and uses its own placement
@@ -162,7 +175,9 @@ def run_llama_cli(
             shell=False,
         )
         stdout, stderr = _communicate_with_interrupt(process, timeout_seconds)
-        result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        result = subprocess.CompletedProcess(
+            command, process.returncode, stdout, stderr
+        )
     except BaseException:
         if process is not None:
             _stop_process(process)
@@ -196,7 +211,9 @@ def _stop_process(process: subprocess.Popen) -> None:
         process.wait(timeout=3)
 
 
-def _communicate_with_interrupt(process: subprocess.Popen, timeout_seconds: int) -> tuple[str, str]:
+def _communicate_with_interrupt(
+    process: subprocess.Popen, timeout_seconds: int
+) -> tuple[str, str]:
     deadline = time.monotonic() + timeout_seconds
     while True:
         if comfy.model_management.processing_interrupted():
@@ -224,7 +241,9 @@ def _parse_response(text: str) -> tuple[str, str, str]:
     perf_match = PERF_RE.search(text)
     perf = perf_match.group(0).strip() if perf_match else ""
     if perf_match:
-        text = text[:perf_match.start()] + text[perf_match.end():]
+        text = text[: perf_match.start()] + text[perf_match.end() :]
+
+    text = EXITING_RE.sub("", text)
 
     content = text.strip()
     if not content:
@@ -233,7 +252,7 @@ def _parse_response(text: str) -> tuple[str, str, str]:
     if not content.startswith(START_THINKING):
         return content, "", perf
 
-    thinking_text = content[len(START_THINKING):]
+    thinking_text = content[len(START_THINKING) :]
     if END_THINKING not in thinking_text:
         return "", thinking_text.strip(), perf
 
