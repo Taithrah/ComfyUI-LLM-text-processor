@@ -2,7 +2,7 @@
 name = "ComfyUI-LLM-text-processor"
 description = "Process text and images with GGUF LLMs in ComfyUI using llama.cpp, including Qwen3-VL, Qwen3.5, Qwen3.6, Gemma 4, and gpt-oss."
 version = "1.3.0"
-license = {file = "LICENSE"}
+license = { file = "LICENSE" }
 dependencies = ["numpy", "Pillow"]
 
 [project.urls]

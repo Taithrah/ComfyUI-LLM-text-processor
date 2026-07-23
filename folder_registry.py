@@ -5,7 +5,6 @@ from pathlib import Path
 
 import folder_paths
 
-
 LLM_FOLDER = "llm_text_processor_models"
 PROMPT_FOLDER = "llm_text_processor_prompts"
 NO_SYSTEM_PROMPT = "none"

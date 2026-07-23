@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-
 LLAMA_CPP_RELEASE_TAG = "b8840"
 RELEASE_API_URL = f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{LLAMA_CPP_RELEASE_TAG}"
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -70,7 +69,9 @@ def _platform_spec() -> PlatformSpec:
 
 
 def _json_get(url: str) -> dict:
-    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ComfyUI-LLM-text-processor"}
+    )
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -88,7 +89,9 @@ def _format_size(num_bytes: float) -> str:
 
 
 def _download(url: str, destination: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-LLM-text-processor"})
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ComfyUI-LLM-text-processor"}
+    )
     with urllib.request.urlopen(request, timeout=120) as response:
         total_size = response.headers.get("Content-Length")
         total_size = int(total_size) if total_size is not None else None
@@ -149,11 +152,14 @@ def _select_assets(release: dict, spec: PlatformSpec) -> list[dict]:
     # without changing the download/extract pipeline.
     for pattern in spec.asset_patterns:
         matches = [
-            asset for asset in assets
+            asset
+            for asset in assets
             if fnmatch.fnmatch(asset.get("name", "").lower(), pattern.lower())
         ]
         if not matches:
-            raise RuntimeError(f"Could not find llama.cpp release asset matching: {pattern}")
+            raise RuntimeError(
+                f"Could not find llama.cpp release asset matching: {pattern}"
+            )
         asset = sorted(matches, key=lambda item: item.get("name", ""))[0]
         if asset["name"] not in used_names:
             selected.append(asset)
@@ -183,7 +189,9 @@ def _has_required_files(install_dir: Path, spec: PlatformSpec) -> bool:
 
 
 def _is_complete_install(install_dir: Path, spec: PlatformSpec) -> bool:
-    return _find_cli_paths(install_dir, spec) is not None and _has_required_files(install_dir, spec)
+    return _find_cli_paths(install_dir, spec) is not None and _has_required_files(
+        install_dir, spec
+    )
 
 
 def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
@@ -219,7 +227,9 @@ def ensure_llama_cli_paths() -> LlamaCliPaths:
     if _is_complete_install(install_dir, spec):
         paths = _find_cli_paths(install_dir, spec)
         if paths is None:
-            raise RuntimeError(f"Completed install has incomplete CLI executables: {install_dir}")
+            raise RuntimeError(
+                f"Completed install has incomplete CLI executables: {install_dir}"
+            )
         return paths
 
     assets = _select_assets(release, spec)
@@ -233,9 +243,12 @@ def ensure_llama_cli_paths() -> LlamaCliPaths:
         )
     if not _has_required_files(install_dir, spec):
         missing = [
-            name for name in spec.required_files
+            name
+            for name in spec.required_files
             if not any(path.is_file() for path in install_dir.rglob(name))
         ]
-        raise RuntimeError(f"Downloaded llama.cpp assets are incomplete; missing: {', '.join(missing)}")
+        raise RuntimeError(
+            f"Downloaded llama.cpp assets are incomplete; missing: {', '.join(missing)}"
+        )
 
     return paths
