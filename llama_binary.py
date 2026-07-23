@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import platform
+import tarfile
 import time
 import urllib.request
 import zipfile
@@ -10,7 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-LLAMA_CPP_RELEASE_TAG = "b8840"
+LLAMA_CPP_RELEASE_TAG = "b10098"
+LLAMA_CPP_LINUX_VARIANT = "cuda"
 RELEASE_API_URL = f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{LLAMA_CPP_RELEASE_TAG}"
 PACKAGE_ROOT = Path(__file__).resolve().parent
 VENDOR_ROOT = PACKAGE_ROOT / "vendor" / "llama.cpp"
@@ -44,15 +46,63 @@ WINDOWS_CUDA_13 = PlatformSpec(
 )
 
 
-LINUX_CUDA = PlatformSpec(
+LINUX_X64_CPU = PlatformSpec(
+    key="linux-x64",
+    cli_executable="llama-cli",
+    asset_patterns=("llama-*-bin-ubuntu-x64.tar.gz",),
+    required_files=(
+        "llama-cli",
+        "libllama.so",
+        "libggml.so",
+    ),
+)
+
+
+LINUX_X64_VULKAN = PlatformSpec(
+    key="linux-x64-vulkan",
+    cli_executable="llama-cli",
+    asset_patterns=("llama-*-bin-ubuntu-vulkan-x64.tar.gz",),
+    required_files=(
+        "llama-cli",
+        "libllama.so",
+        "libggml.so",
+        "libggml-vulkan.so",
+    ),
+)
+
+
+LINUX_X64_ROCM = PlatformSpec(
+    key="linux-x64-rocm",
+    cli_executable="llama-cli",
+    asset_patterns=("llama-*-bin-ubuntu-rocm-*-x64.tar.gz",),
+    required_files=(
+        "llama-cli",
+        "libllama.so",
+        "libggml.so",
+        "libggml-hip.so",
+    ),
+)
+
+
+LINUX_X64_CUDA = PlatformSpec(
     key="linux-x64-cuda",
     cli_executable="llama-cli",
     asset_patterns=(),
     required_files=(
         "llama-cli",
+        "libllama.so",
+        "libggml.so",
         "libggml-cuda.so",
     ),
 )
+
+
+LINUX_VARIANTS: dict[str, PlatformSpec] = {
+    "cpu": LINUX_X64_CPU,
+    "cuda": LINUX_X64_CUDA,
+    "vulkan": LINUX_X64_VULKAN,
+    "rocm": LINUX_X64_ROCM,
+}
 
 
 def _platform_spec() -> PlatformSpec:
@@ -61,9 +111,15 @@ def _platform_spec() -> PlatformSpec:
     if system == "windows" and machine in {"amd64", "x86_64"}:
         return WINDOWS_CUDA_13
     if system == "linux" and machine in {"x86_64", "amd64"}:
-        return LINUX_CUDA
+        spec = LINUX_VARIANTS.get(LLAMA_CPP_LINUX_VARIANT.lower())
+        if spec is None:
+            supported = ", ".join(sorted(LINUX_VARIANTS))
+            raise RuntimeError(
+                f"Unsupported llama.cpp Linux variant: {LLAMA_CPP_LINUX_VARIANT}. Supported values: {supported}"
+            )
+        return spec
     raise RuntimeError(
-        "Automatic llama.cpp binary download currently supports Windows x64 CUDA 13 only. "
+        "Automatic llama.cpp binary download currently supports Windows x64 CUDA 13 and Linux x64 Ubuntu builds only. "
         "Other platforms are intentionally isolated behind the platform mapping for future support."
     )
 
@@ -203,6 +259,20 @@ def _existing_install(spec: PlatformSpec) -> LlamaCliPaths | None:
     return None
 
 
+def _extract_archive(archive_path: Path, install_dir: Path) -> None:
+    if zipfile.is_zipfile(archive_path):
+        with zipfile.ZipFile(archive_path) as archive:
+            archive.extractall(install_dir)
+        return
+
+    if tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path) as archive:
+            archive.extractall(install_dir)
+        return
+
+    raise RuntimeError(f"Unsupported llama.cpp archive format: {archive_path.name}")
+
+
 def _extract_assets(assets: list[dict], install_dir: Path) -> None:
     with TemporaryDirectory(prefix="llm-text-processor-llama-download-") as temp:
         temp_dir = Path(temp)
@@ -210,8 +280,7 @@ def _extract_assets(assets: list[dict], install_dir: Path) -> None:
             archive_path = temp_dir / asset["name"]
             print(f"[LLM Text Processor] Downloading {asset['name']}...")
             _download(asset["browser_download_url"], archive_path)
-            with zipfile.ZipFile(archive_path) as archive:
-                archive.extractall(install_dir)
+            _extract_archive(archive_path, install_dir)
 
 
 def ensure_llama_cli_paths() -> LlamaCliPaths:
@@ -219,6 +288,12 @@ def ensure_llama_cli_paths() -> LlamaCliPaths:
     existing = _existing_install(spec)
     if existing is not None:
         return existing
+
+    if not spec.asset_patterns:
+        raise RuntimeError(
+            f"llama.cpp Linux variant '{LLAMA_CPP_LINUX_VARIANT}' must be installed locally under {VENDOR_ROOT / LLAMA_CPP_RELEASE_TAG / spec.key}. "
+            "No upstream release asset is configured for automatic download."
+        )
 
     release = _json_get(RELEASE_API_URL)
     tag = release.get("tag_name") or LLAMA_CPP_RELEASE_TAG
